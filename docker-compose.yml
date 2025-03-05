@@ -12,7 +12,7 @@ services:
       mongodb:
         condition: service_healthy
     environment:
-      - MongoDbSettings__ConnectionString=mongodb://mongodb:27017
+      - MongoDbSettings__ConnectionString=mongodb://localhost:27017
       - MongoDbSettings__DatabaseName=OrderDatabase
     restart: always
 
