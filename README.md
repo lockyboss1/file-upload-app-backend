@@ -28,17 +28,22 @@ This project is a .NET 7-based API that uses Onion Architecture to process file 
    
 
 2. **API is available at the following base URL:**
-    ```http://localhost:8080
+    ```sh
+    http://localhost:8080
 
 
 3. **Available Endpoints:**
-    ```GET /api/orders - Retrieves all orders from the database.
-    ```GET /api/orders/{orderNumber} - Retrieves a single order by its order number. i.e http://localhost:8080/api/orders/ORDER1
+    ```sh
+    GET /api/orders - Retrieves all orders from the database.
+    
+    GET /api/orders/{orderNumber} - Retrieves a single order by its order number. i.e http://localhost:8080/api/orders/ORDER1
 
 4. **Running Unit Tests:**
-    ```1. Open a terminal in the solution root or the Tests project folder.Open a terminal in the solution root or the Tests project folder.
+    ```sh
+    1. Open a terminal in the solution root or the Tests project folder.Open a terminal in the solution root or the Tests project folder.
     2. Run the following command: dotnet test
  
 
 5. **Stop and Remove the Containers:**
-    ```When you need to shut down the application, run: docker-compose down     
+    ```sh
+    When you need to shut down the application, run: docker-compose down     
