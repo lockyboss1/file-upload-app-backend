@@ -21,6 +21,9 @@ RUN dotnet build --no-restore -c Release
 # Publish the API project
 RUN dotnet publish file-upload-app-backend/file-upload-app-backend.csproj -c Release -o /app/publish --no-restore
 
+# Run tests
+RUN dotnet test
+
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
 WORKDIR /app
