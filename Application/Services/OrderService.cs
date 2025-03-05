@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Data;
+using System.Globalization;
 using Application.DTOs;
 using Application.Exceptions;
 using Application.Helpers;
@@ -7,6 +8,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using Domain.Entities;
 using Domain.Interfaces;
+using ExcelDataReader;
 using Microsoft.AspNetCore.Http;
 
 namespace Application.Services
@@ -26,22 +28,92 @@ namespace Application.Services
         public async Task<Order?> GetOrderByOrderNumberAsync(string orderNumber) =>
             await _orderRepository.GetByOrderNumberAsync(orderNumber);
 
+
         public async Task AddOrderAsync(IFormFile file)
         {
             if (file == null || file.Length == 0)
                 throw new ArgumentException("Uploaded file is empty.");
 
-            using var reader = new StreamReader(file.OpenReadStream());
-            using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
-            {
-                HasHeaderRecord = true,
-                PrepareHeaderForMatch = args => args.Header?.Trim().Replace("*", "") // Remove asterisks
-            });
+            // Determine file type by extension
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            bool isExcelFile = extension == ".xls" || extension == ".xlsx";
+            List<OrderDto> records;
 
+            if (extension == ".csv")
+            {
+                using var reader = new StreamReader(file.OpenReadStream());
+                using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = true,
+                    PrepareHeaderForMatch = args => args.Header?.Trim().Replace("*", "") // Remove asterisks
+                });
+                // Read CSV records into a list
+                records = csv.GetRecords<OrderDto>().ToList();
+            }
+            else if (extension == ".xls" || extension == ".xlsx")
+            {
+                // ExcelDataReader requires registering code page provider
+                System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+                using var stream = file.OpenReadStream();
+                using var excelReader = ExcelReaderFactory.CreateReader(stream);
+                // Configure to use first row as header
+                var conf = new ExcelDataSetConfiguration()
+                {
+                    ConfigureDataTable = _ => new ExcelDataTableConfiguration()
+                    {
+                        UseHeaderRow = true
+                    }
+                };
+                var dataSet = excelReader.AsDataSet(conf);
+                var dataTable = dataSet.Tables[0];
+
+                // Trim all column names and remove asterisks.
+                foreach (DataColumn column in dataTable.Columns)
+                {
+                    column.ColumnName = column.ColumnName.Trim().Replace("*", "");
+                }
+
+                // Convert DataTable rows into a list of OrderDto
+                records = new List<OrderDto>();
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    var orderDto = new OrderDto
+                    {
+                        OrderNumber = row["OrderNumber"]?.ToString(),
+                        AlternateOrderNumber = row["AlternateOrderNumber"]?.ToString(),
+                        OrderDate = row["OrderDate"]?.ToString(),
+                        ShipToName = row["ShipToName"]?.ToString(),
+                        ShipToCompany = row["ShipToCompany"]?.ToString(),
+                        ShipToAddress1 = row["ShipToAddress1"]?.ToString(),
+                        ShipToAddress2 = row["ShipToAddress2"]?.ToString(),
+                        ShipToAddress3 = row["ShipToAddress3"]?.ToString(),
+                        ShipToCity = row["ShipToCity"]?.ToString(),
+                        ShipToState = row["ShipToState"]?.ToString(),
+                        ShipToPostalCode = row["ShipToPostalCode"]?.ToString(),
+                        ShipToCountry = row["ShipToCountry"]?.ToString(),
+                        ShipToPhone = row["ShipToPhone"]?.ToString(),
+                        ShipToEmail = row["ShipToEmail"]?.ToString(),
+                        Sku = row["Sku"]?.ToString(),
+                        Quantity = row["Quantity"]?.ToString(),
+                        RequestedWarehouse = row["RequestedWarehouse"]?.ToString(),
+                        DeliveryInstructions = row["DeliveryInstructions"]?.ToString(),
+                        Tags = row["Tags"]?.ToString()
+                    };
+
+                    records.Add(orderDto);
+                }
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported file type. Only CSV and Excel files are supported.");
+            }
+
+            // Process and validate records
             var orders = new List<Order>();
             var recordErrors = new List<OrderValidationError>();
 
-            await foreach (var record in csv.GetRecordsAsync<OrderDto>())
+            foreach (var record in records)
             {
                 var errorsForRecord = new List<string>();
 
@@ -70,29 +142,40 @@ namespace Application.Services
                 DateTime parsedOrderDate = default;
                 if (!string.IsNullOrWhiteSpace(record.OrderDate))
                 {
+                    // Get the raw date string and trim it.
+                    string orderDateStr = record.OrderDate.Trim();
+
+                    // If processing an Excel file, remove any time part.
+                    if (isExcelFile && orderDateStr.Contains(" "))
+                    {
+                        orderDateStr = orderDateStr.Split(' ')[0];
+                    }
+
+                    // Define allowed date formats.
                     string[] allowedFormats = { "M/d/yyyy", "MM/dd/yyyy", "M/dd/yyyy", "MM/d/yyyy" };
-                    if (!DateTime.TryParseExact(record.OrderDate, allowedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedOrderDate))
+
+                    // Try to parse the date using the allowed formats.
+                    if (!DateTime.TryParseExact(orderDateStr, allowedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedOrderDate))
                     {
                         errorsForRecord.Add("OrderDate must be in a valid format (e.g., MM/dd/yyyy or M/d/yyyy).");
                     }
                 }
 
-                // Quantity validation: must be a positive integer
-                if (!int.TryParse(record.Quantity.ToString(), out int quantity) || quantity <= 0)
+                // Quantity validation: must be a positive integer (disallow non-numeric strings)
+                if (!int.TryParse(record.Quantity, out int quantity) || quantity <= 0)
                     errorsForRecord.Add("Quantity must be a positive integer.");
 
                 // Postal Code validation: must be an integer and exactly 5 digits long
                 if (!int.TryParse(record.ShipToPostalCode, out _) || record.ShipToPostalCode.Length != 5)
                     errorsForRecord.Add("ShipToPostalCode must be a 5-digit integer.");
 
-                // ShipToState validation: must be exactly two characters (state abbreviation)
+                // ShipToState validation: must be exactly two characters
                 if (record.ShipToState?.Length != 2)
-                    errorsForRecord.Add("ShipToState must be a two-character state abbreviation (e.g, PA).");
+                    errorsForRecord.Add("ShipToState must be a two-character state abbreviation (e.g., PA).");
 
-                // Accumulate errors if any validations failed for this record.
+                // Accumulate structured errors if any validations failed for this record.
                 if (errorsForRecord.Any())
                 {
-                    // Add structured error for this record
                     recordErrors.Add(new OrderValidationError
                     {
                         OrderNumber = record.OrderNumber,
@@ -101,7 +184,7 @@ namespace Application.Services
                 }
                 else
                 {
-                    // If all validations pass, add the order
+                    // All validations pass – add the order.
                     orders.Add(new Order
                     {
                         OrderNumber = record.OrderNumber,
@@ -119,21 +202,21 @@ namespace Application.Services
                         ShipToPhone = record.ShipToPhone,
                         ShipToEmail = record.ShipToEmail,
                         Sku = record.Sku,
-                        Quantity = 3,
+                        Quantity = quantity,
                         RequestedWarehouse = record.RequestedWarehouse,
                         DeliveryInstructions = record.DeliveryInstructions,
                         Tags = record.Tags
                     });
-                }                
+                }
             }
 
-            // If there are any validation errors, throw an exception and do not save anything
+            // If there are any validation errors, throw a custom exception and do not save anything.
             if (recordErrors.Any())
             {
                 throw new CustomValidationException(recordErrors);
             }
 
-            // Save valid orders to the database only if no validation errors exist
+            // Save valid orders to the database if there are no validation errors.
             if (orders.Any())
             {
                 await _orderRepository.AddOrdersAsync(orders);
