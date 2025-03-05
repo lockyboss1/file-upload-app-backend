@@ -40,7 +40,7 @@ This project is a .NET 7-based API that uses Onion Architecture to process file 
 
 4. **Running Unit Tests:**
     ```sh
-    1. Open a terminal in the solution root or the Tests project folder.Open a terminal in the solution root or the Tests project folder.
+    1. Open a terminal in the solution root or the Tests project folder
     2. Run the following command: dotnet test
  
 
