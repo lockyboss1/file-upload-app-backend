@@ -18,6 +18,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.WebHost.UseUrls("http://0.0.0.0:8080");
+
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -30,3 +33,4 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
+

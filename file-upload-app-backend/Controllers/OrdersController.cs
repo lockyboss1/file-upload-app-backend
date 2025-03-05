@@ -22,6 +22,13 @@ public class OrderController : ControllerBase
         return Ok(orders);
     }
 
+    [HttpGet("{orderNumber}")]
+    public async Task<IActionResult> GetOrderByOrderNumber(string orderNumber)
+    {
+        var orders = await _orderService.GetOrderByOrderNumberAsync(orderNumber);
+        return Ok(orders);
+    }
+
     [HttpPost("upload")]
     public async Task<IActionResult> UploadOrders(IFormFile file)
     {

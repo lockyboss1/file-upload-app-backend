@@ -24,5 +24,9 @@ RUN dotnet publish file-upload-app-backend/file-upload-app-backend.csproj -c Rel
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
 WORKDIR /app
+
+# Set environment variable for ASP.NET Core to listen on all network interfaces
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "file-upload-app-backend.dll"]
