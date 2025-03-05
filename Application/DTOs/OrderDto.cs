@@ -17,7 +17,7 @@
         public string? ShipToPhone { get; set; }
         public string? ShipToEmail { get; set; }
         public string Sku { get; set; }
-        public int Quantity { get; set; }
+        public string Quantity { get; set; }
         public string RequestedWarehouse { get; set; }
         public string? DeliveryInstructions { get; set; }
         public string? Tags { get; set; }

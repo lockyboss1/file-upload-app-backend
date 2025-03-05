@@ -9,7 +9,6 @@ namespace Application.Interfaces
         Task<IEnumerable<Order>> GetAllOrdersAsync();
         Task<Order?> GetOrderByOrderNumberAsync(string orderNumber);
         Task AddOrderAsync(IFormFile file);
-        Task DeleteOrderAsync(string id);
     }
 }
 

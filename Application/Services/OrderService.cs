@@ -1,5 +1,7 @@
 ﻿using System.Globalization;
 using Application.DTOs;
+using Application.Exceptions;
+using Application.Helpers;
 using Application.Interfaces;
 using CsvHelper;
 using CsvHelper.Configuration;
@@ -37,55 +39,112 @@ namespace Application.Services
             });
 
             var orders = new List<Order>();
+            var recordErrors = new List<OrderValidationError>();
 
             await foreach (var record in csv.GetRecordsAsync<OrderDto>())
             {
-                if (string.IsNullOrWhiteSpace(record.OrderNumber) ||
-                    string.IsNullOrWhiteSpace(record.ShipToName) ||
-                    string.IsNullOrWhiteSpace(record.ShipToAddress1) ||
-                    string.IsNullOrWhiteSpace(record.ShipToCity) ||
-                    string.IsNullOrWhiteSpace(record.ShipToState) ||
-                    string.IsNullOrWhiteSpace(record.ShipToPostalCode) ||
-                    string.IsNullOrWhiteSpace(record.ShipToCountry) ||
-                    string.IsNullOrWhiteSpace(record.Sku) ||
-                    record.Quantity <= 0 ||
-                    string.IsNullOrWhiteSpace(record.RequestedWarehouse))
+                var errorsForRecord = new List<string>();
+
+                // Required field validations
+                ValidateRequiredField(record.OrderNumber, "OrderNumber", errorsForRecord);
+                ValidateRequiredField(record.ShipToName, "ShipToName", errorsForRecord);
+                ValidateRequiredField(record.ShipToAddress1, "ShipToAddress1", errorsForRecord);
+                ValidateRequiredField(record.ShipToCity, "ShipToCity", errorsForRecord);
+                ValidateRequiredField(record.ShipToState, "ShipToState", errorsForRecord);
+                ValidateRequiredField(record.ShipToPostalCode, "ShipToPostalCode", errorsForRecord);
+                ValidateRequiredField(record.ShipToCountry, "ShipToCountry", errorsForRecord);
+                ValidateRequiredField(record.Sku, "Sku", errorsForRecord);
+                ValidateRequiredField(record.RequestedWarehouse, "RequestedWarehouse", errorsForRecord);
+                ValidateRequiredField(record.Quantity, "Quantity", errorsForRecord);
+
+                // Check for duplicate OrderNumber within the file
+                if (orders.Any(o => o.OrderNumber == record.OrderNumber))
+                    errorsForRecord.Add($"Duplicate OrderNumber '{record.OrderNumber}' found in file.");
+
+                // Check for duplicate OrderNumber in the database
+                var existingOrder = await _orderRepository.GetByOrderNumberAsync(record.OrderNumber);
+                if (existingOrder != null)
+                    errorsForRecord.Add($"OrderNumber '{record.OrderNumber}' already exists in the database.");
+
+                // Date format validation (allowing multiple formats)
+                DateTime parsedOrderDate = default;
+                if (!string.IsNullOrWhiteSpace(record.OrderDate))
                 {
-                    continue; // Skip invalid records
+                    string[] allowedFormats = { "M/d/yyyy", "MM/dd/yyyy", "M/dd/yyyy", "MM/d/yyyy" };
+                    if (!DateTime.TryParseExact(record.OrderDate, allowedFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedOrderDate))
+                    {
+                        errorsForRecord.Add("OrderDate must be in a valid format (e.g., MM/dd/yyyy or M/d/yyyy).");
+                    }
                 }
 
-                orders.Add(new Order
+                // Quantity validation: must be a positive integer
+                if (!int.TryParse(record.Quantity.ToString(), out int quantity) || quantity <= 0)
+                    errorsForRecord.Add("Quantity must be a positive integer.");
+
+                // Postal Code validation: must be an integer and exactly 5 digits long
+                if (!int.TryParse(record.ShipToPostalCode, out _) || record.ShipToPostalCode.Length != 5)
+                    errorsForRecord.Add("ShipToPostalCode must be a 5-digit integer.");
+
+                // ShipToState validation: must be exactly two characters (state abbreviation)
+                if (record.ShipToState?.Length != 2)
+                    errorsForRecord.Add("ShipToState must be a two-character state abbreviation (e.g, PA).");
+
+                // Accumulate errors if any validations failed for this record.
+                if (errorsForRecord.Any())
                 {
-                    OrderNumber = record.OrderNumber,
-                    AlternateOrderNumber = record.AlternateOrderNumber,
-                    OrderDate = record.OrderDate,
-                    ShipToName = record.ShipToName,
-                    ShipToCompany = record.ShipToCompany,
-                    ShipToAddress1 = record.ShipToAddress1,
-                    ShipToAddress2 = record.ShipToAddress2,
-                    ShipToAddress3 = record.ShipToAddress3,
-                    ShipToCity = record.ShipToCity,
-                    ShipToState = record.ShipToState,
-                    ShipToPostalCode = record.ShipToPostalCode,
-                    ShipToCountry = record.ShipToCountry,
-                    ShipToPhone = record.ShipToPhone,
-                    ShipToEmail = record.ShipToEmail,
-                    Sku = record.Sku,
-                    Quantity = record.Quantity,
-                    RequestedWarehouse = record.RequestedWarehouse,
-                    DeliveryInstructions = record.DeliveryInstructions,
-                    Tags = record.Tags
-                });
+                    // Add structured error for this record
+                    recordErrors.Add(new OrderValidationError
+                    {
+                        OrderNumber = record.OrderNumber,
+                        Messages = errorsForRecord
+                    });
+                }
+                else
+                {
+                    // If all validations pass, add the order
+                    orders.Add(new Order
+                    {
+                        OrderNumber = record.OrderNumber,
+                        AlternateOrderNumber = record.AlternateOrderNumber,
+                        OrderDate = string.IsNullOrWhiteSpace(record.OrderDate) ? null : parsedOrderDate.ToString("MM/dd/yyyy"),
+                        ShipToName = record.ShipToName,
+                        ShipToCompany = record.ShipToCompany,
+                        ShipToAddress1 = record.ShipToAddress1,
+                        ShipToAddress2 = record.ShipToAddress2,
+                        ShipToAddress3 = record.ShipToAddress3,
+                        ShipToCity = record.ShipToCity,
+                        ShipToState = record.ShipToState,
+                        ShipToPostalCode = record.ShipToPostalCode,
+                        ShipToCountry = record.ShipToCountry,
+                        ShipToPhone = record.ShipToPhone,
+                        ShipToEmail = record.ShipToEmail,
+                        Sku = record.Sku,
+                        Quantity = 3,
+                        RequestedWarehouse = record.RequestedWarehouse,
+                        DeliveryInstructions = record.DeliveryInstructions,
+                        Tags = record.Tags
+                    });
+                }                
             }
 
+            // If there are any validation errors, throw an exception and do not save anything
+            if (recordErrors.Any())
+            {
+                throw new CustomValidationException(recordErrors);
+            }
+
+            // Save valid orders to the database only if no validation errors exist
             if (orders.Any())
             {
                 await _orderRepository.AddOrdersAsync(orders);
             }
         }
 
-        public async Task DeleteOrderAsync(string id) =>
-            await _orderRepository.DeleteAsync(id);
+        private void ValidateRequiredField(string fieldValue, string fieldName, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(fieldValue))
+                errors.Add($"{fieldName} is required.");
+        }
     }
 }
 

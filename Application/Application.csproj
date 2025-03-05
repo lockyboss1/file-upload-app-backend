@@ -10,11 +10,15 @@
     <None Remove="Services\" />
     <None Remove="DTOs\" />
     <None Remove="Interfaces\" />
+    <None Remove="Exceptions\" />
+    <None Remove="Helpers\" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Services\" />
     <Folder Include="DTOs\" />
     <Folder Include="Interfaces\" />
+    <Folder Include="Exceptions\" />
+    <Folder Include="Helpers\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />

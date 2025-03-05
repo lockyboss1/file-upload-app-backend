@@ -1,4 +1,5 @@
-﻿using Application.Interfaces;
+﻿using Application.Exceptions;
+using Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace file_upload_app_backend.Controllers;
@@ -24,19 +25,19 @@ public class OrderController : ControllerBase
     [HttpPost("upload")]
     public async Task<IActionResult> UploadOrders(IFormFile file)
     {
-        if (file == null || file.Length == 0)
+        try
         {
-            return BadRequest("No file uploaded.");
+            await _orderService.AddOrderAsync(file);
+            return Ok("Orders processed successfully.");
         }
-
-        await _orderService.AddOrderAsync(file);
-        return Ok("File processed successfully.");
-    }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteOrder(string id)
-    {
-        await _orderService.DeleteOrderAsync(id);
-        return NoContent();
+        catch (CustomValidationException exception)
+        {
+            return BadRequest(new { errors = exception.Errors });
+        }
+        catch (Exception ex)
+        {
+            // For any other exceptions, return a generic error message
+            return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+        }
     }
 }
