@@ -1,7 +1,11 @@
-﻿using Application.DTOs;
+﻿using System.Globalization;
+using Application.DTOs;
 using Application.Interfaces;
+using CsvHelper;
+using CsvHelper.Configuration;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.AspNetCore.Http;
 
 namespace Application.Services
 {
@@ -17,66 +21,67 @@ namespace Application.Services
         public async Task<IEnumerable<Order>> GetAllOrdersAsync() =>
             await _orderRepository.GetAllAsync();
 
-        public async Task<Order?> GetOrderByIdAsync(string id) =>
-            await _orderRepository.GetByIdAsync(id);
-
         public async Task<Order?> GetOrderByOrderNumberAsync(string orderNumber) =>
             await _orderRepository.GetByOrderNumberAsync(orderNumber);
 
-        public async Task AddOrderAsync(OrderDto orderDto)
+        public async Task AddOrderAsync(IFormFile file)
         {
-            var order = new Order
+            if (file == null || file.Length == 0)
+                throw new ArgumentException("Uploaded file is empty.");
+
+            using var reader = new StreamReader(file.OpenReadStream());
+            using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                OrderNumber = orderDto.OrderNumber,
-                AlternateOrderNumber = orderDto.AlternateOrderNumber,
-                OrderDate = orderDto.OrderDate,
-                ShipToName = orderDto.ShipToName,
-                ShipToCompany = orderDto.ShipToCompany,
-                ShipToAddress1 = orderDto.ShipToAddress1,
-                ShipToAddress2 = orderDto.ShipToAddress2,
-                ShipToAddress3 = orderDto.ShipToAddress3,
-                ShipToCity = orderDto.ShipToCity,
-                ShipToState = orderDto.ShipToState,
-                ShipToPostalCode = orderDto.ShipToPostalCode,
-                ShipToCountry = orderDto.ShipToCountry,
-                ShipToPhone = orderDto.ShipToPhone,
-                ShipToEmail = orderDto.ShipToEmail,
-                Sku = orderDto.Sku,
-                Quantity = orderDto.Quantity,
-                RequestedWarehouse = orderDto.RequestedWarehouse,
-                DeliveryInstructions = orderDto.DeliveryInstructions,
-                Tags = orderDto.Tags
-            };
+                HasHeaderRecord = true,
+                PrepareHeaderForMatch = args => args.Header?.Trim().Replace("*", "") // Remove asterisks
+            });
 
-            await _orderRepository.AddAsync(order);
-        }
+            var orders = new List<Order>();
 
-        public async Task UpdateOrderAsync(string id, OrderDto orderDto)
-        {
-            var existingOrder = await _orderRepository.GetByIdAsync(id);
-            if (existingOrder == null) return;
+            await foreach (var record in csv.GetRecordsAsync<OrderDto>())
+            {
+                if (string.IsNullOrWhiteSpace(record.OrderNumber) ||
+                    string.IsNullOrWhiteSpace(record.ShipToName) ||
+                    string.IsNullOrWhiteSpace(record.ShipToAddress1) ||
+                    string.IsNullOrWhiteSpace(record.ShipToCity) ||
+                    string.IsNullOrWhiteSpace(record.ShipToState) ||
+                    string.IsNullOrWhiteSpace(record.ShipToPostalCode) ||
+                    string.IsNullOrWhiteSpace(record.ShipToCountry) ||
+                    string.IsNullOrWhiteSpace(record.Sku) ||
+                    record.Quantity <= 0 ||
+                    string.IsNullOrWhiteSpace(record.RequestedWarehouse))
+                {
+                    continue; // Skip invalid records
+                }
 
-            existingOrder.OrderNumber = orderDto.OrderNumber;
-            existingOrder.AlternateOrderNumber = orderDto.AlternateOrderNumber;
-            existingOrder.OrderDate = orderDto.OrderDate;
-            existingOrder.ShipToName = orderDto.ShipToName;
-            existingOrder.ShipToCompany = orderDto.ShipToCompany;
-            existingOrder.ShipToAddress1 = orderDto.ShipToAddress1;
-            existingOrder.ShipToAddress2 = orderDto.ShipToAddress2;
-            existingOrder.ShipToAddress3 = orderDto.ShipToAddress3;
-            existingOrder.ShipToCity = orderDto.ShipToCity;
-            existingOrder.ShipToState = orderDto.ShipToState;
-            existingOrder.ShipToPostalCode = orderDto.ShipToPostalCode;
-            existingOrder.ShipToCountry = orderDto.ShipToCountry;
-            existingOrder.ShipToPhone = orderDto.ShipToPhone;
-            existingOrder.ShipToEmail = orderDto.ShipToEmail;
-            existingOrder.Sku = orderDto.Sku;
-            existingOrder.Quantity = orderDto.Quantity;
-            existingOrder.RequestedWarehouse = orderDto.RequestedWarehouse;
-            existingOrder.DeliveryInstructions = orderDto.DeliveryInstructions;
-            existingOrder.Tags = orderDto.Tags;
+                orders.Add(new Order
+                {
+                    OrderNumber = record.OrderNumber,
+                    AlternateOrderNumber = record.AlternateOrderNumber,
+                    OrderDate = record.OrderDate,
+                    ShipToName = record.ShipToName,
+                    ShipToCompany = record.ShipToCompany,
+                    ShipToAddress1 = record.ShipToAddress1,
+                    ShipToAddress2 = record.ShipToAddress2,
+                    ShipToAddress3 = record.ShipToAddress3,
+                    ShipToCity = record.ShipToCity,
+                    ShipToState = record.ShipToState,
+                    ShipToPostalCode = record.ShipToPostalCode,
+                    ShipToCountry = record.ShipToCountry,
+                    ShipToPhone = record.ShipToPhone,
+                    ShipToEmail = record.ShipToEmail,
+                    Sku = record.Sku,
+                    Quantity = record.Quantity,
+                    RequestedWarehouse = record.RequestedWarehouse,
+                    DeliveryInstructions = record.DeliveryInstructions,
+                    Tags = record.Tags
+                });
+            }
 
-            await _orderRepository.UpdateAsync(existingOrder);
+            if (orders.Any())
+            {
+                await _orderRepository.AddOrdersAsync(orders);
+            }
         }
 
         public async Task DeleteOrderAsync(string id) =>

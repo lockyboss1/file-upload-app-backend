@@ -1,5 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
-using Domain.Entities;
+﻿using Domain.Entities;
+using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
 namespace Infrastructure.Data
@@ -8,14 +8,10 @@ namespace Infrastructure.Data
     {
         private readonly IMongoDatabase _database;
 
-        public MongoDbContext(IConfiguration configuration)
+        public MongoDbContext(IOptions<MongoDbSettings> settings)
         {
-            var mongoSettings = configuration.GetSection("MongoDbSettings");
-            var connectionString = mongoSettings["ConnectionString"];
-            var databaseName = mongoSettings["DatabaseName"];
-
-            var client = new MongoClient(connectionString);
-            _database = client.GetDatabase(databaseName);
+            var client = new MongoClient(settings.Value.ConnectionString);
+            _database = client.GetDatabase(settings.Value.DatabaseName);
         }
 
         public IMongoCollection<Order> Orders => _database.GetCollection<Order>("Orders");

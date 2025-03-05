@@ -16,5 +16,13 @@ namespace Infrastructure.Repositories
 
         public async Task<Order?> GetByOrderNumberAsync(string orderNumber) =>
             await _orders.Find(o => o.OrderNumber == orderNumber).FirstOrDefaultAsync();
+
+        public async Task AddOrdersAsync(IEnumerable<Order> orders)
+        {
+            if (orders != null && orders.Any())
+            {
+                await _orders.InsertManyAsync(orders);
+            }
+        }
     }
 }

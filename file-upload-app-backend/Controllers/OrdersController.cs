@@ -1,5 +1,4 @@
-﻿using Application.DTOs;
-using Application.Interfaces;
+﻿using Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace file_upload_app_backend.Controllers;
@@ -22,27 +21,16 @@ public class OrderController : ControllerBase
         return Ok(orders);
     }
 
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetOrderById(string id)
+    [HttpPost("upload")]
+    public async Task<IActionResult> UploadOrders(IFormFile file)
     {
-        var order = await _orderService.GetOrderByIdAsync(id);
-        if (order == null)
-            return NotFound();
-        return Ok(order);
-    }
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest("No file uploaded.");
+        }
 
-    [HttpPost]
-    public async Task<IActionResult> CreateOrder([FromBody] OrderDto orderDto)
-    {
-        await _orderService.AddOrderAsync(orderDto);
-        return CreatedAtAction(nameof(GetOrderById), new { id = orderDto.OrderNumber }, orderDto);
-    }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateOrder(string id, [FromBody] OrderDto orderDto)
-    {
-        await _orderService.UpdateOrderAsync(id, orderDto);
-        return NoContent();
+        await _orderService.AddOrderAsync(file);
+        return Ok("File processed successfully.");
     }
 
     [HttpDelete("{id}")]
