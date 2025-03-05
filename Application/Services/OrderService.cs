@@ -45,7 +45,9 @@ namespace Application.Services
                 using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
                 {
                     HasHeaderRecord = true,
-                    PrepareHeaderForMatch = args => args.Header?.Trim().Replace("*", "") // Remove asterisks
+                    PrepareHeaderForMatch = args => args.Header?.Trim().Replace("*", ""), // Remove asterisks,
+                    HeaderValidated = null,
+                    MissingFieldFound = null
                 });
                 // Read CSV records into a list
                 records = csv.GetRecords<OrderDto>().ToList();
@@ -58,14 +60,14 @@ namespace Application.Services
                 using var stream = file.OpenReadStream();
                 using var excelReader = ExcelReaderFactory.CreateReader(stream);
                 // Configure to use first row as header
-                var conf = new ExcelDataSetConfiguration()
+                var config = new ExcelDataSetConfiguration()
                 {
                     ConfigureDataTable = _ => new ExcelDataTableConfiguration()
                     {
                         UseHeaderRow = true
                     }
                 };
-                var dataSet = excelReader.AsDataSet(conf);
+                var dataSet = excelReader.AsDataSet(config);
                 var dataTable = dataSet.Tables[0];
 
                 // Trim all column names and remove asterisks.
@@ -80,25 +82,25 @@ namespace Application.Services
                 {
                     var orderDto = new OrderDto
                     {
-                        OrderNumber = row["OrderNumber"]?.ToString(),
-                        AlternateOrderNumber = row["AlternateOrderNumber"]?.ToString(),
-                        OrderDate = row["OrderDate"]?.ToString(),
-                        ShipToName = row["ShipToName"]?.ToString(),
-                        ShipToCompany = row["ShipToCompany"]?.ToString(),
-                        ShipToAddress1 = row["ShipToAddress1"]?.ToString(),
-                        ShipToAddress2 = row["ShipToAddress2"]?.ToString(),
-                        ShipToAddress3 = row["ShipToAddress3"]?.ToString(),
-                        ShipToCity = row["ShipToCity"]?.ToString(),
-                        ShipToState = row["ShipToState"]?.ToString(),
-                        ShipToPostalCode = row["ShipToPostalCode"]?.ToString(),
-                        ShipToCountry = row["ShipToCountry"]?.ToString(),
-                        ShipToPhone = row["ShipToPhone"]?.ToString(),
-                        ShipToEmail = row["ShipToEmail"]?.ToString(),
-                        Sku = row["Sku"]?.ToString(),
-                        Quantity = row["Quantity"]?.ToString(),
-                        RequestedWarehouse = row["RequestedWarehouse"]?.ToString(),
-                        DeliveryInstructions = row["DeliveryInstructions"]?.ToString(),
-                        Tags = row["Tags"]?.ToString()
+                        OrderNumber = dataTable.Columns.Contains("OrderNumber") ? row["OrderNumber"]?.ToString() : null,
+                        AlternateOrderNumber = dataTable.Columns.Contains("AlternateOrderNumber") ? row["AlternateOrderNumber"]?.ToString() : null,
+                        OrderDate = dataTable.Columns.Contains("OrderDate") ? row["OrderDate"]?.ToString() : null,
+                        ShipToName = dataTable.Columns.Contains("ShipToName") ? row["ShipToName"]?.ToString() : null,
+                        ShipToCompany = dataTable.Columns.Contains("ShipToCompany") ? row["ShipToCompany"]?.ToString() : null,
+                        ShipToAddress1 = dataTable.Columns.Contains("ShipToAddress1") ? row["ShipToAddress1"]?.ToString() : null,
+                        ShipToAddress2 = dataTable.Columns.Contains("ShipToAddress2") ? row["ShipToAddress2"]?.ToString() : null,
+                        ShipToAddress3 = dataTable.Columns.Contains("ShipToAddress3") ? row["ShipToAddress3"]?.ToString() : null,
+                        ShipToCity = dataTable.Columns.Contains("ShipToCity") ? row["ShipToCity"]?.ToString() : null,
+                        ShipToState = dataTable.Columns.Contains("ShipToState") ? row["ShipToState"]?.ToString() : null,
+                        ShipToPostalCode = dataTable.Columns.Contains("ShipToPostalCode") ? row["ShipToPostalCode"]?.ToString() : null,
+                        ShipToCountry = dataTable.Columns.Contains("ShipToCountry") ? row["ShipToCountry"]?.ToString() : null,
+                        ShipToPhone = dataTable.Columns.Contains("ShipToPhone") ? row["ShipToPhone"]?.ToString() : null,
+                        ShipToEmail = dataTable.Columns.Contains("ShipToEmail") ? row["ShipToEmail"]?.ToString() : null,
+                        Sku = dataTable.Columns.Contains("Sku") ? row["Sku"]?.ToString() : null,
+                        Quantity = dataTable.Columns.Contains("Quantity") ? row["Quantity"]?.ToString() : null,
+                        RequestedWarehouse = dataTable.Columns.Contains("RequestedWarehouse") ? row["RequestedWarehouse"]?.ToString() : null,
+                        DeliveryInstructions = dataTable.Columns.Contains("DeliveryInstructions") ? row["DeliveryInstructions"]?.ToString() : null,
+                        Tags = dataTable.Columns.Contains("Tags") ? row["Tags"]?.ToString() : null
                     };
 
                     records.Add(orderDto);
